@@ -57,6 +57,7 @@ class Game {
         ];
         this.barriers = [];
         this.generateBarriers();
+        this.createBaseDefense();
         this.keys = {};
         
         window.addEventListener('keydown', (e) => this.keys[e.key] = true);
@@ -78,6 +79,23 @@ class Game {
             
             this.barriers.push(new Barrier(x, y));
         }
+    }
+
+    createBaseDefense() {
+        const baseBarriers = [
+            // Left side barriers
+            { x: this.base.x - 32, y: this.base.y },
+            { x: this.base.x - 32, y: this.base.y - 32 },
+            // Right side barriers
+            { x: this.base.x + 32, y: this.base.y },
+            { x: this.base.x + 32, y: this.base.y - 32 },
+            // Top barriers
+            { x: this.base.x, y: this.base.y - 32 }
+        ];
+
+        baseBarriers.forEach(pos => {
+            this.barriers.push(new Barrier(pos.x, pos.y));
+        });
     }
 
     isPositionOccupied(x, y) {
