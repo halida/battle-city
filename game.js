@@ -31,7 +31,13 @@ class Game {
                 y = Math.floor(Math.random() * (this.canvas.height / gridSize)) * gridSize;
             } while (this.isPositionOccupied(x, y));
             
-            this.barriers.push({ x, y, width: gridSize, height: gridSize });
+            this.barriers.push({ 
+                x, 
+                y, 
+                width: gridSize, 
+                height: gridSize,
+                health: 3  // Each barrier starts with 3 health
+            });
         }
     }
 
@@ -121,11 +127,15 @@ class Game {
             bullet.update();
             
             // Check collision with barriers
-            for (let i = 0; i < this.barriers.length; i++) {
+            for (let i = this.barriers.length - 1; i >= 0; i--) {
                 if (this.checkCollision(
                     { x: bullet.x - bullet.size/2, y: bullet.y - bullet.size/2, width: bullet.size, height: bullet.size },
                     this.barriers[i]
                 )) {
+                    this.barriers[i].health--;
+                    if (this.barriers[i].health <= 0) {
+                        this.barriers.splice(i, 1);
+                    }
                     return false; // Remove bullet
                 }
             }
@@ -239,9 +249,29 @@ class Game {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw barriers
-        this.ctx.fillStyle = '#666';
         for (const barrier of this.barriers) {
+            // Change color based on health
+            switch(barrier.health) {
+                case 3:
+                    this.ctx.fillStyle = '#666';
+                    break;
+                case 2:
+                    this.ctx.fillStyle = '#888';
+                    break;
+                case 1:
+                    this.ctx.fillStyle = '#AAA';
+                    break;
+            }
             this.ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+            
+            // Draw health number
+            this.ctx.fillStyle = '#FFF';
+            this.ctx.font = '10px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(barrier.health.toString(), 
+                            barrier.x + barrier.width/2, 
+                            barrier.y + barrier.height/2);
         }
         
         // Draw player tank
