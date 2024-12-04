@@ -2,19 +2,105 @@ class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        this.playerTank = new Tank(224, 448, 'up', '#5C9');
+        this.playerTank = new Tank(224, 448, 'up', '#5C9', this);
         this.bullets = [];
         this.enemies = [
-            new Tank(0, 0, 'down', '#F55'),
-            new Tank(224, 0, 'down', '#F55'),
-            new Tank(448, 0, 'down', '#F55')
+            new Tank(0, 0, 'down', '#F55', this),
+            new Tank(224, 0, 'down', '#F55', this),
+            new Tank(448, 0, 'down', '#F55', this)
         ];
+        this.barriers = [];
+        this.generateBarriers();
         this.keys = {};
         
         window.addEventListener('keydown', (e) => this.keys[e.key] = true);
         window.addEventListener('keyup', (e) => this.keys[e.key] = false);
         
         this.gameLoop();
+    }
+
+    generateBarriers() {
+        // Generate random barriers
+        const gridSize = 32; // Same as tank size
+        const numBarriers = 20;
+        
+        for (let i = 0; i < numBarriers; i++) {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * (this.canvas.width / gridSize)) * gridSize;
+                y = Math.floor(Math.random() * (this.canvas.height / gridSize)) * gridSize;
+            } while (this.isPositionOccupied(x, y));
+            
+            this.barriers.push({ x, y, width: gridSize, height: gridSize });
+        }
+    }
+
+    isPositionOccupied(x, y) {
+        // Check if position overlaps with tanks or other barriers
+        const tanks = [this.playerTank, ...this.enemies];
+        for (const tank of tanks) {
+            if (this.checkCollision(
+                { x, y, width: 32, height: 32 },
+                { x: tank.x, y: tank.y, width: tank.size, height: tank.size }
+            )) {
+                return true;
+            }
+        }
+        
+        for (const barrier of this.barriers) {
+            if (this.checkCollision(
+                { x, y, width: 32, height: 32 },
+                barrier
+            )) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    checkCollision(rect1, rect2) {
+        return !(rect1.x >= rect2.x + rect2.width ||
+                rect1.x + rect1.width <= rect2.x ||
+                rect1.y >= rect2.y + rect2.height ||
+                rect1.y + rect1.height <= rect2.y);
+    }
+
+    canMove(tank, newX, newY) {
+        const newPos = {
+            x: newX,
+            y: newY,
+            width: tank.size,
+            height: tank.size
+        };
+
+        // Check collision with barriers
+        for (const barrier of this.barriers) {
+            if (this.checkCollision(newPos, barrier)) {
+                return false;
+            }
+        }
+
+        // Check collision with other tanks
+        const otherTanks = [this.playerTank, ...this.enemies].filter(t => t !== tank);
+        for (const otherTank of otherTanks) {
+            if (this.checkCollision(newPos, {
+                x: otherTank.x,
+                y: otherTank.y,
+                width: otherTank.size,
+                height: otherTank.size
+            })) {
+                return false;
+            }
+        }
+
+        // Check canvas boundaries
+        if (newX < 0 || newX + tank.size > this.canvas.width ||
+            newY < 0 || newY + tank.size > this.canvas.height) {
+            return false;
+        }
+
+        return true;
     }
 
     update() {
@@ -34,16 +120,28 @@ class Game {
         this.bullets = this.bullets.filter(bullet => {
             bullet.update();
             
+            // Check collision with barriers
+            for (let i = 0; i < this.barriers.length; i++) {
+                if (this.checkCollision(
+                    { x: bullet.x - bullet.size/2, y: bullet.y - bullet.size/2, width: bullet.size, height: bullet.size },
+                    this.barriers[i]
+                )) {
+                    return false; // Remove bullet
+                }
+            }
+            
             // Check collision with tanks
             // Player bullet hits enemy
             if (bullet.source === 'player') {
                 for (let i = this.enemies.length - 1; i >= 0; i--) {
                     const enemy = this.enemies[i];
-                    if (this.checkCollision(bullet, enemy)) {
+                    if (this.checkCollision(
+                        { x: bullet.x - bullet.size/2, y: bullet.y - bullet.size/2, width: bullet.size, height: bullet.size },
+                        { x: enemy.x, y: enemy.y, width: enemy.size, height: enemy.size }
+                    )) {
                         enemy.health--;
                         if (enemy.health <= 0) {
                             this.enemies.splice(i, 1);
-                            // Check for win condition
                             if (this.enemies.length === 0) {
                                 alert('You Win! Congratulations!');
                                 location.reload();
@@ -54,7 +152,10 @@ class Game {
                 }
             } 
             // Enemy bullet hits player
-            else if (this.checkCollision(bullet, this.playerTank)) {
+            else if (this.checkCollision(
+                { x: bullet.x - bullet.size/2, y: bullet.y - bullet.size/2, width: bullet.size, height: bullet.size },
+                { x: this.playerTank.x, y: this.playerTank.y, width: this.playerTank.size, height: this.playerTank.size }
+            )) {
                 this.playerTank.health--;
                 if (this.playerTank.health <= 0) {
                     alert('Game Over!');
@@ -70,13 +171,53 @@ class Game {
         this.enemies.forEach(enemy => {
             if (Math.random() < 0.01) {
                 if (Math.random() < 0.8) {  // 80% chance to trace player
-                    // Trace player
+                    // Get direction to player while avoiding barriers
                     const dx = this.playerTank.x - enemy.x;
                     const dy = this.playerTank.y - enemy.y;
+                    
+                    // Try primary direction first
+                    let primaryDir, secondaryDir;
                     if (Math.abs(dx) > Math.abs(dy)) {
-                        enemy.direction = dx > 0 ? 'right' : 'left';
+                        primaryDir = dx > 0 ? 'right' : 'left';
+                        secondaryDir = dy > 0 ? 'down' : 'up';
                     } else {
-                        enemy.direction = dy > 0 ? 'down' : 'up';
+                        primaryDir = dy > 0 ? 'down' : 'up';
+                        secondaryDir = dx > 0 ? 'right' : 'left';
+                    }
+
+                    // Test movement in primary direction
+                    let testX = enemy.x;
+                    let testY = enemy.y;
+                    switch(primaryDir) {
+                        case 'up': testY -= enemy.speed; break;
+                        case 'down': testY += enemy.speed; break;
+                        case 'left': testX -= enemy.speed; break;
+                        case 'right': testX += enemy.speed; break;
+                    }
+
+                    // If primary direction is blocked, try secondary
+                    if (!this.canMove(enemy, testX, testY)) {
+                        testX = enemy.x;
+                        testY = enemy.y;
+                        switch(secondaryDir) {
+                            case 'up': testY -= enemy.speed; break;
+                            case 'down': testY += enemy.speed; break;
+                            case 'left': testX -= enemy.speed; break;
+                            case 'right': testX += enemy.speed; break;
+                        }
+                        
+                        // If both directions are blocked, try opposite of blocked direction
+                        if (!this.canMove(enemy, testX, testY)) {
+                            const oppositeDir = {
+                                'up': 'down', 'down': 'up',
+                                'left': 'right', 'right': 'left'
+                            };
+                            enemy.direction = oppositeDir[enemy.direction] || primaryDir;
+                        } else {
+                            enemy.direction = secondaryDir;
+                        }
+                    } else {
+                        enemy.direction = primaryDir;
                     }
                 } else {  // 20% chance to move randomly
                     enemy.direction = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)];
@@ -97,6 +238,12 @@ class Game {
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
+        // Draw barriers
+        this.ctx.fillStyle = '#666';
+        for (const barrier of this.barriers) {
+            this.ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+        }
+        
         // Draw player tank
         this.playerTank.draw(this.ctx);
         
@@ -112,17 +259,10 @@ class Game {
         this.draw();
         requestAnimationFrame(() => this.gameLoop());
     }
-
-    checkCollision(bullet, tank) {
-        return bullet.x >= tank.x && 
-               bullet.x <= tank.x + tank.size &&
-               bullet.y >= tank.y && 
-               bullet.y <= tank.y + tank.size;
-    }
 }
 
 class Tank {
-    constructor(x, y, direction, color) {
+    constructor(x, y, direction, color, game) {
         this.x = x;
         this.y = y;
         this.direction = direction;
@@ -132,23 +272,33 @@ class Tank {
         this.cooldown = 0;
         this.cooldownTime = 30;
         this.health = color === '#5C9' ? 2 : 3; // Player has 2 health, enemies have 3
+        this.game = game;
     }
 
     move(direction) {
         this.direction = direction;
+        let newX = this.x;
+        let newY = this.y;
+        
         switch(direction) {
             case 'up':
-                this.y = Math.max(0, this.y - this.speed);
+                newY = this.y - this.speed;
                 break;
             case 'down':
-                this.y = Math.min(512 - this.size, this.y + this.speed);
+                newY = this.y + this.speed;
                 break;
             case 'left':
-                this.x = Math.max(0, this.x - this.speed);
+                newX = this.x - this.speed;
                 break;
             case 'right':
-                this.x = Math.min(512 - this.size, this.x + this.speed);
+                newX = this.x + this.speed;
                 break;
+        }
+
+        // Only update position if movement is allowed
+        if (this.game.canMove(this, newX, newY)) {
+            this.x = newX;
+            this.y = newY;
         }
     }
 
