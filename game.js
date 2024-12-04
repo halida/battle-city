@@ -69,7 +69,18 @@ class Game {
         // Update enemies
         this.enemies.forEach(enemy => {
             if (Math.random() < 0.01) {
-                enemy.direction = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)];
+                if (Math.random() < 0.8) {  // 80% chance to trace player
+                    // Trace player
+                    const dx = this.playerTank.x - enemy.x;
+                    const dy = this.playerTank.y - enemy.y;
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        enemy.direction = dx > 0 ? 'right' : 'left';
+                    } else {
+                        enemy.direction = dy > 0 ? 'down' : 'up';
+                    }
+                } else {  // 20% chance to move randomly
+                    enemy.direction = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)];
+                }
             }
             enemy.move(enemy.direction);
             if (Math.random() < 0.02) {
@@ -120,7 +131,7 @@ class Tank {
         this.size = 32;
         this.cooldown = 0;
         this.cooldownTime = 30;
-        this.health = color === '#5C9' ? 1 : 3; // Player has 1 health, enemies have 3
+        this.health = color === '#5C9' ? 2 : 3; // Player has 2 health, enemies have 3
     }
 
     move(direction) {
@@ -158,24 +169,19 @@ class Tank {
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.size, this.size);
         
-        // Draw health indicator for enemy tanks
-        if (this.color !== '#5C9') {
-            const indicatorSize = 8;
-            const centerX = this.x + this.size / 2 - indicatorSize / 2;
-            const centerY = this.y + this.size / 2 - indicatorSize / 2;
-            
-            // Set color based on remaining health
-            let healthColor;
-            switch(this.health) {
-                case 3: healthColor = '#F00'; break; // Red
-                case 2: healthColor = '#FF0'; break; // Yellow
-                case 1: healthColor = '#00F'; break; // Blue
-                default: healthColor = '#000'; break;
-            }
-            
-            ctx.fillStyle = healthColor;
-            ctx.fillRect(centerX, centerY, indicatorSize, indicatorSize);
-        }
+        // Draw health indicator for all tanks
+        const indicatorSize = 12;
+        const centerX = this.x + this.size / 2 - indicatorSize / 2;
+        const centerY = this.y + this.size / 2 - indicatorSize / 2;
+        
+        // Draw health number
+        ctx.fillStyle = '#000';
+        ctx.fillRect(centerX, centerY, indicatorSize, indicatorSize);
+        ctx.fillStyle = '#FFF';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.health.toString(), this.x + this.size / 2, this.y + this.size / 2);
         
         // Draw tank cannon
         ctx.fillStyle = '#000';
