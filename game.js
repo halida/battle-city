@@ -297,6 +297,7 @@ class Tank {
         this.y = y;
         this.direction = direction;
         this.color = color;
+        this.cannonColor = color === '#5C9' ? '#185' : '#911'; // Much darker shade for cannon
         this.speed = 2;
         this.size = 32;
         this.cooldown = 0;
@@ -363,8 +364,8 @@ class Tank {
         ctx.textBaseline = 'middle';
         ctx.fillText(this.health.toString(), this.x + this.size / 2, this.y + this.size / 2);
         
-        // Draw tank cannon
-        ctx.fillStyle = '#000';
+        // Draw tank cannon with darker color
+        ctx.fillStyle = this.cannonColor;
         const cannonWidth = 4;
         const cannonLength = 20;
         
