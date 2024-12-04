@@ -1,8 +1,54 @@
+class Base {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 32;
+        this.height = 32;
+        this.health = 1;
+    }
+
+    draw(ctx) {
+        // Draw base
+        ctx.fillStyle = '#0F0';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        // Draw star symbol
+        ctx.fillStyle = '#FF0';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★', this.x + this.width/2, this.y + this.height/2);
+    }
+}
+
+class Barrier {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 32;
+        this.height = 32;
+        this.health = 3;
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.health === 3 ? '#888' : 
+                       this.health === 2 ? '#666' : '#444';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = '#FFF';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.health.toString(), 
+                    this.x + this.width/2, 
+                    this.y + this.height/2);
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
-        this.playerTank = new Tank(224, 448, 'up', '#5C9', this);
+        this.base = new Base(240, 464);
+        this.playerTank = new Tank(124, 448, 'up', '#5C9', this);
         this.bullets = [];
         this.enemies = [
             new Tank(0, 0, 'down', '#F55', this),
@@ -21,23 +67,16 @@ class Game {
 
     generateBarriers() {
         // Generate random barriers
-        const gridSize = 32; // Same as tank size
-        const numBarriers = 20;
-        
-        for (let i = 0; i < numBarriers; i++) {
-            let x, y;
-            do {
-                x = Math.floor(Math.random() * (this.canvas.width / gridSize)) * gridSize;
-                y = Math.floor(Math.random() * (this.canvas.height / gridSize)) * gridSize;
-            } while (this.isPositionOccupied(x, y));
+        for (let i = 0; i < 20; i++) {
+            const x = Math.floor(Math.random() * 15) * 32;
+            const y = Math.floor(Math.random() * 12) * 32;
             
-            this.barriers.push({ 
-                x, 
-                y, 
-                width: gridSize, 
-                height: gridSize,
-                health: 3  // Each barrier starts with 3 health
-            });
+            // Don't place barriers on tanks or too close to them
+            if (Math.abs(x - this.playerTank.x) < 64 && Math.abs(y - this.playerTank.y) < 64) {
+                continue;
+            }
+            
+            this.barriers.push(new Barrier(x, y));
         }
     }
 
@@ -79,6 +118,11 @@ class Game {
             width: tank.size,
             height: tank.size
         };
+
+        // Check collision with base
+        if (this.checkCollision(newPos, this.base)) {
+            return false;
+        }
 
         // Check collision with barriers
         for (const barrier of this.barriers) {
@@ -125,6 +169,18 @@ class Game {
         // Update bullets and check collisions
         this.bullets = this.bullets.filter(bullet => {
             bullet.update();
+            
+            // Check collision with base
+            if (this.checkCollision(
+                { x: bullet.x - bullet.size/2, y: bullet.y - bullet.size/2, width: bullet.size, height: bullet.size },
+                this.base
+            )) {
+                if (bullet.source === 'enemy') {
+                    alert('Game Over! Base Destroyed!');
+                    location.reload();
+                }
+                return false;
+            }
             
             // Check collision with barriers
             for (let i = this.barriers.length - 1; i >= 0; i--) {
@@ -248,40 +304,11 @@ class Game {
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw barriers
-        for (const barrier of this.barriers) {
-            // Change color based on health
-            switch(barrier.health) {
-                case 3:
-                    this.ctx.fillStyle = '#666';
-                    break;
-                case 2:
-                    this.ctx.fillStyle = '#888';
-                    break;
-                case 1:
-                    this.ctx.fillStyle = '#AAA';
-                    break;
-            }
-            this.ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
-            
-            // Draw health number
-            this.ctx.fillStyle = '#FFF';
-            this.ctx.font = '10px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(barrier.health.toString(), 
-                            barrier.x + barrier.width/2, 
-                            barrier.y + barrier.height/2);
-        }
-        
-        // Draw player tank
-        this.playerTank.draw(this.ctx);
-        
-        // Draw enemies
-        this.enemies.forEach(enemy => enemy.draw(this.ctx));
-        
-        // Draw bullets
+        this.base.draw(this.ctx);
+        this.barriers.forEach(barrier => barrier.draw(this.ctx));
         this.bullets.forEach(bullet => bullet.draw(this.ctx));
+        this.enemies.forEach(enemy => enemy.draw(this.ctx));
+        this.playerTank.draw(this.ctx);
     }
 
     gameLoop() {
@@ -297,12 +324,12 @@ class Tank {
         this.y = y;
         this.direction = direction;
         this.color = color;
-        this.cannonColor = color === '#5C9' ? '#185' : '#911'; // Much darker shade for cannon
+        this.cannonColor = color === '#5C9' ? '#185' : '#911';
         this.speed = 2;
         this.size = 32;
         this.cooldown = 0;
         this.cooldownTime = 30;
-        this.health = color === '#5C9' ? 2 : 3; // Player has 2 health, enemies have 3
+        this.health = color === '#5C9' ? 2 : 3;
         this.game = game;
     }
 
@@ -347,43 +374,48 @@ class Tank {
     }
 
     draw(ctx) {
+        // Draw tank body
         ctx.fillStyle = this.color;
         ctx.fillRect(this.x, this.y, this.size, this.size);
         
-        // Draw health indicator for all tanks
+        // Draw health indicator
         const indicatorSize = 12;
-        const centerX = this.x + this.size / 2 - indicatorSize / 2;
-        const centerY = this.y + this.size / 2 - indicatorSize / 2;
-        
-        // Draw health number
+        const centerX = this.x + this.size/2 - indicatorSize/2;
+        const centerY = this.y + this.size/2 - indicatorSize/2;
         ctx.fillStyle = '#000';
         ctx.fillRect(centerX, centerY, indicatorSize, indicatorSize);
         ctx.fillStyle = '#FFF';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(this.health.toString(), this.x + this.size / 2, this.y + this.size / 2);
+        ctx.fillText(this.health.toString(), 
+                    this.x + this.size/2, 
+                    this.y + this.size/2);
         
-        // Draw tank cannon with darker color
+        // Draw cannon
         ctx.fillStyle = this.cannonColor;
         const cannonWidth = 4;
         const cannonLength = 20;
         
         switch(this.direction) {
             case 'up':
-                ctx.fillRect(this.x + (this.size - cannonWidth) / 2, this.y - cannonLength / 2, 
+                ctx.fillRect(this.x + (this.size - cannonWidth)/2, 
+                           this.y - cannonLength/2, 
                            cannonWidth, cannonLength);
                 break;
             case 'down':
-                ctx.fillRect(this.x + (this.size - cannonWidth) / 2, this.y + this.size - cannonLength / 2, 
+                ctx.fillRect(this.x + (this.size - cannonWidth)/2, 
+                           this.y + this.size - cannonLength/2, 
                            cannonWidth, cannonLength);
                 break;
             case 'left':
-                ctx.fillRect(this.x - cannonLength / 2, this.y + (this.size - cannonWidth) / 2, 
+                ctx.fillRect(this.x - cannonLength/2, 
+                           this.y + (this.size - cannonWidth)/2, 
                            cannonLength, cannonWidth);
                 break;
             case 'right':
-                ctx.fillRect(this.x + this.size - cannonLength / 2, this.y + (this.size - cannonWidth) / 2, 
+                ctx.fillRect(this.x + this.size - cannonLength/2, 
+                           this.y + (this.size - cannonWidth)/2, 
                            cannonLength, cannonWidth);
                 break;
         }
@@ -414,8 +446,10 @@ class Bullet {
     }
 
     draw(ctx) {
-        ctx.fillStyle = '#FFF';
-        ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+        ctx.fillStyle = this.source === 'player' ? '#FFF' : '#F00';
+        ctx.fillRect(this.x - this.size/2, 
+                    this.y - this.size/2, 
+                    this.size, this.size);
     }
 }
 
